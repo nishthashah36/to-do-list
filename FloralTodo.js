@@ -154,8 +154,9 @@ function editorHTML(initialTasks) {
     .empty b { display:block; font-family:Georgia,serif; color:var(--ink); font-size:20px; margin:10px; }
     .add { position:fixed; right:22px; bottom:26px; border:0; border-radius:999px; padding:14px 20px;
       color:white; background:linear-gradient(110deg,#e77fad,#719bd6); font-size:15px; font-weight:700; box-shadow:0 8px 22px #8b76af40; }
-    dialog { border:0; border-radius:22px; padding:0; width:min(90vw,430px); color:var(--ink); box-shadow:0 22px 80px #51456355; }
-    dialog::backdrop { background:#51456355; backdrop-filter:blur(3px); }
+    .modal { display:none; position:fixed; inset:0; z-index:20; align-items:center; justify-content:center; padding:20px; background:#51456355; backdrop-filter:blur(3px); }
+    .modal.show { display:flex; }
+    .modal-card { border-radius:22px; padding:0; width:min(90vw,430px); max-height:90vh; overflow:auto; color:var(--ink); box-shadow:0 22px 80px #51456355; }
     form { padding:22px; background:var(--paper); }
     form h2 { margin:0 0 16px; font-family:Georgia,serif; font-weight:500; }
     label { display:block; font-size:12px; font-weight:700; color:var(--muted); margin:12px 0 5px; }
@@ -174,27 +175,40 @@ function editorHTML(initialTasks) {
     <main id="list"></main>
   </div>
   <button class="add" onclick="openForm()">＋ Add task</button>
-  <dialog id="modal"><form onsubmit="saveForm(event)">
+  <div class="modal" id="modal" onclick="closeFromBackdrop(event)"><div class="modal-card"><form onsubmit="saveForm(event)">
     <h2 id="formTitle">New task</h2><input type="hidden" id="taskId">
     <label>Task</label><input id="title" required maxlength="120" placeholder="What needs doing?">
     <div class="grid"><div><label>Priority</label><select id="priority"><option value="high">High</option><option value="medium" selected>Medium</option><option value="low">Low</option></select></div>
     <div><label>Category</label><input id="category" maxlength="40" placeholder="School, Personal…"></div></div>
     <label>Due date (optional)</label><input id="dueDate" type="date">
-    <div class="actions"><button type="button" class="delete" id="deleteBtn" onclick="deleteTask()">Delete</button><button type="button" class="cancel" onclick="modal.close()">Cancel</button><button class="save">Save</button></div>
-  </form></dialog>
+    <div class="actions"><button type="button" class="delete" id="deleteBtn" onclick="deleteTask()">Delete</button><button type="button" class="cancel" onclick="closeForm()">Cancel</button><button class="save">Save</button></div>
+  </form></div></div>
   <script>
     let tasks = ${safeTasks};
     let view = 'today';
     const today = new Date().toISOString().slice(0,10);
+    const byId = id => document.getElementById(id);
+    const listEl = byId('list');
+    const progressEl = byId('progress');
+    const modalEl = byId('modal');
+    const formTitleEl = byId('formTitle');
+    const taskIdEl = byId('taskId');
+    const titleEl = byId('title');
+    const priorityEl = byId('priority');
+    const categoryEl = byId('category');
+    const dueDateEl = byId('dueDate');
+    const deleteBtnEl = byId('deleteBtn');
     const esc = s => String(s||'').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#039;'}[c]));
     document.querySelector('#date').textContent = new Date().toLocaleDateString(undefined,{weekday:'long',month:'long',day:'numeric'});
     document.querySelectorAll('.tab').forEach(b=>b.onclick=()=>{ view=b.dataset.view; document.querySelectorAll('.tab').forEach(x=>x.classList.toggle('active',x===b)); render(); });
     function visible(){ let a=[...tasks]; if(view==='done') a=a.filter(t=>t.completed); else if(view==='today') a=a.filter(t=>!t.completed && (!t.dueDate || t.dueDate<=today)); else a=a.filter(t=>!t.completed); return a.sort((x,y)=>(x.dueDate||'9999').localeCompare(y.dueDate||'9999') || ({high:0,medium:1,low:2}[x.priority]-({high:0,medium:1,low:2}[y.priority]))); }
-    function render(){ const a=visible(), done=tasks.filter(t=>t.completed).length; progress.textContent=done+' completed · '+tasks.filter(t=>!t.completed).length+' left'; list.innerHTML=a.length?a.map(t=>'<article class="task '+(t.completed?'done':'')+'"><input class="check" type="checkbox" '+(t.completed?'checked':'')+' onchange="toggle(\''+t.id+'\')"><div onclick="openForm(\''+t.id+'\')"><div class="title">'+esc(t.title)+'</div><div class="meta">'+(t.category?'<span>'+esc(t.category)+'</span>':'')+(t.dueDate?'<span>'+esc(t.dueDate)+(t.dueDate<today?' · overdue':'')+'</span>':'')+'</div></div><span class="priority '+t.priority+'"></span></article>').join(''):'<div class="empty">❀<b>Nothing growing here yet</b>Add a task when you’re ready.</div>'; }
+    function render(){ const a=visible(), done=tasks.filter(t=>t.completed).length; progressEl.textContent=done+' completed · '+tasks.filter(t=>!t.completed).length+' left'; listEl.innerHTML=a.length?a.map(t=>'<article class="task '+(t.completed?'done':'')+'"><input class="check" type="checkbox" '+(t.completed?'checked':'')+' onchange="toggle(\''+t.id+'\')"><div onclick="openForm(\''+t.id+'\')"><div class="title">'+esc(t.title)+'</div><div class="meta">'+(t.category?'<span>'+esc(t.category)+'</span>':'')+(t.dueDate?'<span>'+esc(t.dueDate)+(t.dueDate<today?' · overdue':'')+'</span>':'')+'</div></div><span class="priority '+t.priority+'"></span></article>').join(''):'<div class="empty">❀<b>Nothing growing here yet</b>Add a task when you’re ready.</div>'; }
     function toggle(id){ const t=tasks.find(x=>x.id===id); if(t){t.completed=!t.completed; render();} }
-    function openForm(id){ const t=tasks.find(x=>x.id===id); formTitle.textContent=t?'Edit task':'New task'; taskId.value=t?.id||''; title.value=t?.title||''; priority.value=t?.priority||'medium'; category.value=t?.category||''; dueDate.value=t?.dueDate||''; deleteBtn.style.visibility=t?'visible':'hidden'; modal.showModal(); if(!t) setTimeout(()=>title.focus(),100); }
-    function saveForm(e){ e.preventDefault(); const id=taskId.value; const data={title:title.value.trim(),priority:priority.value,category:category.value.trim(),dueDate:dueDate.value}; if(id){Object.assign(tasks.find(x=>x.id===id),data);}else{tasks.push({id:Date.now().toString(36)+Math.random().toString(36).slice(2),completed:false,createdAt:new Date().toISOString(),...data});} modal.close(); render(); }
-    function deleteTask(){ tasks=tasks.filter(x=>x.id!==taskId.value); modal.close(); render(); }
+    function openForm(id){ const t=tasks.find(x=>x.id===id); formTitleEl.textContent=t?'Edit task':'New task'; taskIdEl.value=t?.id||''; titleEl.value=t?.title||''; priorityEl.value=t?.priority||'medium'; categoryEl.value=t?.category||''; dueDateEl.value=t?.dueDate||''; deleteBtnEl.style.visibility=t?'visible':'hidden'; modalEl.classList.add('show'); if(!t) setTimeout(()=>titleEl.focus(),100); }
+    function closeForm(){ modalEl.classList.remove('show'); }
+    function closeFromBackdrop(e){ if(e.target===modalEl) closeForm(); }
+    function saveForm(e){ e.preventDefault(); const id=taskIdEl.value; const data={title:titleEl.value.trim(),priority:priorityEl.value,category:categoryEl.value.trim(),dueDate:dueDateEl.value}; if(id){Object.assign(tasks.find(x=>x.id===id),data);}else{tasks.push({id:Date.now().toString(36)+Math.random().toString(36).slice(2),completed:false,createdAt:new Date().toISOString(),...data});} closeForm(); render(); }
+    function deleteTask(){ tasks=tasks.filter(x=>x.id!==taskIdEl.value); closeForm(); render(); }
     render();
   </script>
 </body></html>`;
